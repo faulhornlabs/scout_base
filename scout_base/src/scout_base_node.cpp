@@ -1,76 +1,80 @@
 #include <memory>
 
-#include <ros/ros.h>
-#include <nav_msgs/Odometry.h>
-#include <sensor_msgs/JointState.h>
-#include <tf/transform_broadcaster.h>
+#include <rclcpp/rclcpp.hpp>
+#include <ugv_sdk/scout/scout_base.hpp>
+#include <scout_base/scout_messenger.hpp>
 
-#include "ugv_sdk/scout/scout_base.hpp"
-#include "scout_base/scout_messenger.hpp"
 
-using namespace westonrobot;
-
-std::shared_ptr<ScoutBase> robot;
-
-void DetachRobot(int signal) {
+void DetachRobot(std::shared_ptr<westonrobot::ScoutBase> robot)
+{
   robot->Disconnect();
   robot->Terminate();
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
   // setup ROS node
-  ros::init(argc, argv, "scout_odom");
-  ros::NodeHandle node(""), private_node("~");
+  rclcpp::init(argc, argv);
+  rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("scout_base_node");
 
-  std::signal(SIGINT, DetachRobot);
+  rclcpp::Logger logger = node->get_logger();
 
   // check wether controlling scout mini
-  bool is_scout_mini = false;
-  private_node.param<bool>("is_scout_mini", is_scout_mini, false);
-  std::cout << "Working as scout mini: " << is_scout_mini << std::endl;
+  bool is_scout_mini = node->declare_parameter("is_scout_mini", true);
+  RCLCPP_INFO(logger, "Working as scout mini: %d",  int(is_scout_mini));
 
   // instantiate a robot object
-  robot = std::make_shared<ScoutBase>(is_scout_mini);
-  ScoutROSMessenger messenger(robot.get(), &node);
+  std::shared_ptr<westonrobot::ScoutBase> robot =
+    std::make_shared<westonrobot::ScoutBase>(is_scout_mini);
+  std::shared_ptr<westonrobot::ScoutROSMessenger> messenger =
+    std::make_shared<westonrobot::ScoutROSMessenger>(robot, node);
 
   // fetch parameters before connecting to robot
-  std::string port_name;
-  private_node.param<std::string>("port_name", port_name, std::string("can0"));
-  private_node.param<std::string>("odom_frame", messenger.odom_frame_,
-                                  std::string("odom"));
-  private_node.param<std::string>("base_frame", messenger.base_frame_,
-                                  std::string("base_link"));
-  private_node.param<bool>("simulated_robot", messenger.simulated_robot_,
-                           false);
-  private_node.param<int>("control_rate", messenger.sim_control_rate_, 50);
-  private_node.param<std::string>("odom_topic_name", messenger.odom_topic_name_,
-                                  std::string("odom"));
+  std::string port_name = node->declare_parameter("port_name", std::string("can0"));
+  messenger->odom_frame_ = node->declare_parameter("odom_frame", std::string("odom"));
+  messenger->base_frame_ = node->declare_parameter("base_frame", std::string("base_link"));
+  messenger->simulated_robot_ = node->declare_parameter("simulated_robot", false);
+  messenger->sim_control_rate_ = node->declare_parameter("control_rate", 50);
+  messenger->odom_topic_name_ = node->declare_parameter("odom_topic_name", std::string("odom"));
 
-  if (!messenger.simulated_robot_) {
+  if (!messenger->simulated_robot_) {
     // connect to robot and setup ROS subscription
     if (port_name.find("can") != std::string::npos) {
       robot->Connect(port_name);
-      ROS_INFO("Using CAN bus to talk with the robot");
+      RCLCPP_INFO(logger, "Using CAN bus to talk with the robot, interface name: %s", port_name.c_str());
     } else {
       robot->Connect(port_name, 115200);
-      ROS_INFO("Using UART to talk with the robot");
+      RCLCPP_INFO(logger, "Using UART to talk with the robot");
     }
   }
-  messenger.SetupSubscription();
+  messenger->SetupSubscription();
 
   // publish robot state at 50Hz while listening to twist commands
-  ros::Rate rate(50);
-  while (true) {
-    if (!messenger.simulated_robot_) {
-      messenger.PublishStateToROS();
-    } else {
-      double linear, angular;
-      messenger.GetCurrentMotionCmdForSim(linear, angular);
-      messenger.PublishSimStateToROS(linear, angular);
+  rclcpp::Rate loop_rate(50);
+  while (rclcpp::ok()) 
+  {
+    if (!messenger->simulated_robot_)
+    {
+      messenger->PublishStateToROS();
     }
-    ros::spinOnce();
-    rate.sleep();
+    else
+    {
+      double linear, angular;
+      messenger->GetCurrentMotionCmdForSim(linear, angular);
+      messenger->PublishSimStateToROS(linear, angular);
+    }
+    rclcpp::spin_some(node);
+    loop_rate.sleep();
   }
-
+  RCLCPP_INFO(logger, "Detach robot");
+  DetachRobot(robot);
+  RCLCPP_INFO(logger, "Reset messenger!");
+  messenger.reset();
+  RCLCPP_INFO(logger, "Reset robot");
+  robot.reset();
+  RCLCPP_INFO(logger, "Reset node");
+  node.reset();
+  RCLCPP_INFO(logger, "Shutdown ros");
+  rclcpp::shutdown();
   return 0;
 }

@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 
 int8 MOTOR_ID_FRONT_RIGHT = 0
 int8 MOTOR_ID_FRONT_LEFT = 1
