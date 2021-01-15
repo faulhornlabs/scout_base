@@ -39,6 +39,11 @@ def generate_launch_description():
             default_value='odom_scout',
             description='Odometry frame name'),
 
+        DeclareLaunchArgument(
+            'publish_odometry',
+            default_value='false',
+            description='Publsh odometry and tf data'),
+
         Node(
             package='scout_base',
             executable='scout_base_node',
@@ -51,6 +56,7 @@ def generate_launch_description():
                 {'odom_frame': LaunchConfiguration('odom_frame')},
                 {'base_frame': LaunchConfiguration('base_frame')},
                 {'odom_topic_name': LaunchConfiguration('odom_topic_name')},
+                {'publish_odometry': LaunchConfiguration('publish_odometry')},
             ]
         ),
     ])

@@ -11,7 +11,6 @@
 #define SCOUT_MESSENGER_HPP
 
 #include <string>
-
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2_ros/transform_broadcaster.h>
@@ -19,6 +18,9 @@
 #include <scout_msgs/msg/scout_light_cmd.hpp>
 #include <scout_msgs/msg/scout_status.hpp>
 #include <ugv_sdk/scout/scout_base.hpp>
+#ifdef NO_ERROR
+#undef NO_ERROR
+#endif
 
 namespace westonrobot
 {

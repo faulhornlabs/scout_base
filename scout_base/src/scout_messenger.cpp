@@ -22,7 +22,12 @@ namespace westonrobot
   void ScoutROSMessenger::SetupSubscription()
   {
     // odometry publisher
-    odom_publisher_ = nh_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name_, rclcpp::QoS(1));
+      if (nh_->get_parameter("publish_odometry").as_bool())
+      {
+          RCLCPP_INFO(nh_->get_logger(), "Createing odom publisher on topic: %s", odom_topic_name_.c_str());
+          odom_publisher_ = nh_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name_, rclcpp::QoS(1));
+      }
+    
     status_publisher_ = nh_->create_publisher<scout_msgs::msg::ScoutStatus>("/scout_status", rclcpp::QoS(1));
 
     // cmd subscriber
@@ -175,7 +180,10 @@ namespace westonrobot
     status_publisher_->publish(status_msg);
 
     // publish odometry and tf
-    PublishOdometryToROS(state.linear_velocity, state.angular_velocity, dt);
+    if (odom_publisher_)
+    {
+        PublishOdometryToROS(state.linear_velocity, state.angular_velocity, dt);
+    }
 
     // record time for next integration
     last_time_ = current_time_;
@@ -225,7 +233,10 @@ namespace westonrobot
     status_publisher_->publish(status_msg);
 
     // publish odometry and tf
-    PublishOdometryToROS(linear, angular, dt);
+    if (odom_publisher_)
+    {
+        PublishOdometryToROS(linear, angular, dt);
+    }
 
     // record time for next integration
     last_time_ = current_time_;
@@ -260,13 +271,13 @@ namespace westonrobot
     tf_msg.transform.translation.y = position_y_;
     tf_msg.transform.translation.z = 0.0;
     tf_msg.transform.rotation = odom_quat;
-
+    RCLCPP_INFO(nh_->get_logger(), "Sending transform from odom_frame %s to base_frame %s ", odom_frame_.c_str(), base_frame_.c_str());
     tf_broadcaster_->sendTransform(tf_msg);
 
     // publish odometry and tf messages
     nav_msgs::msg::Odometry odom_msg;
     odom_msg.header.stamp = current_time_;
-    odom_msg.header.frame_id = "testes";
+    odom_msg.header.frame_id = odom_frame_;
     odom_msg.child_frame_id = base_frame_;
 
     odom_msg.pose.pose.position.x = position_x_;
@@ -279,5 +290,16 @@ namespace westonrobot
     odom_msg.twist.twist.angular.z = angular_speed_;
 
     odom_publisher_->publish(std::move(odom_msg));
+
+    // TODO - hack do not know how to do this
+    ////map and odometry are identical frames
+    //geometry_msgs::msg::TransformStamped T_map_odom;
+    //T_map_odom.header.frame_id = "map";
+    //T_map_odom.header.stamp = current_time_;
+    //T_map_odom.child_frame_id = odom_frame_;
+    //tf2::Transform odom_to_map;
+    //odom_to_map.setIdentity();
+    //T_map_odom.transform = tf2::toMsg(odom_to_map);
+    //tf_broadcaster_->sendTransform(T_map_odom);
   }
 } // namespace westonrobot

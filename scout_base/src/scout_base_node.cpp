@@ -36,6 +36,7 @@ int main(int argc, char **argv)
   messenger->simulated_robot_ = node->declare_parameter("simulated_robot", false);
   messenger->sim_control_rate_ = node->declare_parameter("control_rate", 50);
   messenger->odom_topic_name_ = node->declare_parameter("odom_topic_name", std::string("odom"));
+  node->declare_parameter("publish_odometry", false);
 
   if (!messenger->simulated_robot_) {
     // connect to robot and setup ROS subscription
