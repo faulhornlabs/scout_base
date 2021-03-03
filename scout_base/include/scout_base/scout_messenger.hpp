@@ -70,6 +70,7 @@ private:
     void TwistCmdCallback(const geometry_msgs::msg::Twist::ConstSharedPtr msg);
     void LightCmdCallback(const scout_msgs::msg::ScoutLightCmd::ConstSharedPtr msg);
     void PublishOdometryToROS(double linear, double angular, double dt);
+    void BroadcastTfToROS(double linear, double angular, double dt);
 };
 } // namespace westonrobot
 

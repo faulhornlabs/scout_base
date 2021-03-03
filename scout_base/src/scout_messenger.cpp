@@ -24,7 +24,7 @@ namespace westonrobot
     // odometry publisher
       if (nh_->get_parameter("publish_odometry").as_bool())
       {
-          RCLCPP_INFO(nh_->get_logger(), "Createing odom publisher on topic: %s", odom_topic_name_.c_str());
+          RCLCPP_INFO(nh_->get_logger(), "Creating odom publisher on topic: %s", odom_topic_name_.c_str());
           odom_publisher_ = nh_->create_publisher<nav_msgs::msg::Odometry>(odom_topic_name_, rclcpp::QoS(1));
       }
     
@@ -35,7 +35,13 @@ namespace westonrobot
       std::bind(&ScoutROSMessenger::TwistCmdCallback, this, std::placeholders::_1));
     light_cmd_subscriber_ = nh_->create_subscription<scout_msgs::msg::ScoutLightCmd>("/scout_light_control", 5,
       std::bind(&ScoutROSMessenger::LightCmdCallback, this, std::placeholders::_1));
-    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(nh_.get());
+   // tf broadcaster
+      if (nh_->get_parameter("broadcast_tf").as_bool())
+      {
+          RCLCPP_INFO(nh_->get_logger(), "Creating tf broadcaster of frame: %s", odom_frame_.c_str());
+          tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(nh_.get());
+      }
+
     current_time_ = nh_->now();
     last_time_ = nh_->now();
   }
@@ -179,10 +185,16 @@ namespace westonrobot
         state.front_light_state.custom_value;
     status_publisher_->publish(status_msg);
 
-    // publish odometry and tf
+    // publish odometry
     if (odom_publisher_)
     {
         PublishOdometryToROS(state.linear_velocity, state.angular_velocity, dt);
+    }
+
+    // broadcast tf
+    if (tf_broadcaster_)
+    {
+        BroadcastTfToROS(state.linear_velocity, state.angular_velocity, dt);
     }
 
     // record time for next integration
@@ -232,17 +244,61 @@ namespace westonrobot
 
     status_publisher_->publish(status_msg);
 
-    // publish odometry and tf
+    // publish odometry 
     if (odom_publisher_)
     {
         PublishOdometryToROS(linear, angular, dt);
     }
+
+    // broadcast tf
+    if (tf_broadcaster_)
+    {
+        BroadcastTfToROS(linear, angular, dt);
+    }
+
 
     // record time for next integration
     last_time_ = current_time_;
   }
 
   void ScoutROSMessenger::PublishOdometryToROS(double linear, double angular,
+                                               double dt)
+  {
+    // perform numerical integration to get an estimation of pose
+    linear_speed_ = linear;
+    angular_speed_ = angular;
+
+    double d_x = linear_speed_ * std::cos(theta_) * dt;
+    double d_y = linear_speed_ * std::sin(theta_) * dt;
+    double d_theta = angular_speed_ * dt;
+
+    position_x_ += d_x;
+    position_y_ += d_y;
+    theta_ += d_theta;
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, theta_);
+    geometry_msgs::msg::Quaternion odom_quat = tf2::toMsg(q);
+
+    // publish odometry and tf messages
+    nav_msgs::msg::Odometry odom_msg;
+    odom_msg.header.stamp = current_time_;
+    odom_msg.header.frame_id = odom_frame_;
+    odom_msg.child_frame_id = base_frame_;
+
+    odom_msg.pose.pose.position.x = position_x_;
+    odom_msg.pose.pose.position.y = position_y_;
+    odom_msg.pose.pose.position.z = 0.0;
+    odom_msg.pose.pose.orientation = odom_quat;
+
+    odom_msg.twist.twist.linear.x = linear_speed_;
+    odom_msg.twist.twist.linear.y = 0.0;
+    odom_msg.twist.twist.angular.z = angular_speed_;
+
+    odom_publisher_->publish(std::move(odom_msg));
+  }
+
+  void ScoutROSMessenger::BroadcastTfToROS(double linear, double angular,
                                                double dt)
   {
     // perform numerical integration to get an estimation of pose
@@ -273,23 +329,6 @@ namespace westonrobot
     tf_msg.transform.rotation = odom_quat;
     RCLCPP_INFO(nh_->get_logger(), "Sending transform from odom_frame %s to base_frame %s ", odom_frame_.c_str(), base_frame_.c_str());
     tf_broadcaster_->sendTransform(tf_msg);
-
-    // publish odometry and tf messages
-    nav_msgs::msg::Odometry odom_msg;
-    odom_msg.header.stamp = current_time_;
-    odom_msg.header.frame_id = odom_frame_;
-    odom_msg.child_frame_id = base_frame_;
-
-    odom_msg.pose.pose.position.x = position_x_;
-    odom_msg.pose.pose.position.y = position_y_;
-    odom_msg.pose.pose.position.z = 0.0;
-    odom_msg.pose.pose.orientation = odom_quat;
-
-    odom_msg.twist.twist.linear.x = linear_speed_;
-    odom_msg.twist.twist.linear.y = 0.0;
-    odom_msg.twist.twist.angular.z = angular_speed_;
-
-    odom_publisher_->publish(std::move(odom_msg));
 
     // TODO - hack do not know how to do this
     ////map and odometry are identical frames

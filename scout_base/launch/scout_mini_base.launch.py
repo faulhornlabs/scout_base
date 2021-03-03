@@ -18,7 +18,7 @@ def generate_launch_description():
             'port_name',
             default_value='can0',
             description='Can interface name'),
-        
+
         DeclareLaunchArgument(
             'simulated_robot',
             default_value='false',
@@ -41,13 +41,17 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             'publish_odometry',
-            default_value='false',
-            description='Publsh odometry and tf data'),
+            default_value='true',
+            description='Publish odometry data'),
 
+        DeclareLaunchArgument(
+            'publish_tf',
+            default_value='false',
+            description='Publish tf data'),
         Node(
             package='scout_base',
             executable='scout_base_node',
-            arguments=[('--ros-args --log-level INFO')],
+            arguments=['--ros-args','--log-level','ERROR'],
             name='scout_base',
             parameters=[
                 {'is_scout_mini': LaunchConfiguration('is_scout_mini')},
